@@ -1,0 +1,69 @@
+c=[
+
+9804,	318,	260;
+327,	9138,	525;
+254,	479,	6701
+
+];
+
+% Class labels
+labels = {'AD', 'CN', 'MCI'};
+
+% Total samples
+total = sum(C(:));
+
+% Number of classes
+numClasses = size(C, 1);
+
+% Initialize metric arrays
+precision    = zeros(1, numClasses);
+recall       = zeros(1, numClasses);
+f1score      = zeros(1, numClasses);
+specificity  = zeros(1, numClasses);
+accuracy     = zeros(1, numClasses);
+
+% Per-class metrics
+for i = 1:numClasses
+    TP = C(i,i);
+    FP = sum(C(:,i)) - TP;
+    FN = sum(C(i,:)) - TP;
+    TN = total - TP - FP - FN;
+
+    precision(i)   = TP / (TP + FP);
+    recall(i)      = TP / (TP + FN);
+    f1score(i)     = 2 * (precision(i) * recall(i)) / (precision(i) + recall(i));
+    specificity(i) = TN / (TN + FP);
+    accuracy(i)    = (TP + TN) / (TP + TN + FP + FN);  % fixed
+end
+
+% Overall accuracy
+overall_accuracy = trace(C) / total;
+
+% Macro averages (simple mean of per-class values)
+overall_precision   = mean(precision);
+overall_recall      = mean(recall);
+overall_f1          = mean(f1score);
+overall_specificity = mean(specificity);
+
+% Weighted averages
+support = sum(C, 2);  % actual instances per class
+totalSupport = sum(support);
+
+weighted_precision   = sum(precision    .* (support'/totalSupport));
+weighted_recall      = sum(recall       .* (support'/totalSupport));
+weighted_f1          = sum(f1score      .* (support'/totalSupport));
+weighted_specificity = sum(specificity  .* (support'/totalSupport));
+
+% Display results
+%fprintf('\nClass\tPrecision\tRecall\tF1-score\tSpecificity\tAccuracy\n');
+%for i = 1:numClasses
+%    fprintf('%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n', ...
+%        labels{i}, precision(i), recall(i), f1score(i), specificity(i), accuracy(i));
+%end
+
+
+fprintf('Macro Avg\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n', ...
+    overall_precision, overall_recall, overall_f1, overall_specificity, overall_accuracy);
+
+%fprintf('Weighted Avg\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n', ...
+%    weighted_precision, weighted_recall, weighted_f1, weighted_specificity, overall_accuracy);

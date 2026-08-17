@@ -1,0 +1,98 @@
+
+clc; clear; close all;
+
+%% ---------------- Configuration ----------------
+inputDir  = 'C:\ADNI\ADNI-4-NII\';
+outputDir = 'C:\ADNI\ADNI-4-JPG\';
+
+targetSize   = [224 224];  
+numSlicesOut = 50;         
+
+% Noise-cleaning parameters
+gaussSigma   = 0.5;        
+medianFiltSz = [3 3];      
+
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+
+% List all NIfTI files in the directory
+niftiFiles = dir(fullfile(inputDir, '*.nii'));   % for ADNI data
+% niftiFiles = dir(fullfile(inputDir, '*.nii.gz'));
+
+if isempty(niftiFiles)
+    error('No NIfTI files found in %s', inputDir);
+end
+
+%% ---------------- Main Processing Loop ----------------
+for fileIdx = 1:numel(niftiFiles)
+
+    niftiFile = fullfile(inputDir, niftiFiles(fileIdx).name);
+    niftiInfo = niftiinfo(niftiFile);
+    niftiData = double(niftiread(niftiInfo));
+
+    % ---------- Step 1: Handle 4D -> 3D temporal averaging ----------
+    numDims = ndims(niftiData);
+    if numDims == 4
+        % Average across the time dimension (4th dimension) to obtain a
+        % stable 3D brain volume from the 4D spatiotemporal fMRI scan.
+        volume3D = mean(niftiData, 4);
+    elseif numDims == 3
+        % Already a 3D volume (e.g., a single time point or a structural
+        % scan) - use as-is.
+        volume3D = niftiData;
+    else
+        warning('Unexpected volume dimensionality (%dD) in %s - skipping.', ...
+            numDims, niftiFiles(fileIdx).name);
+        continue;
+    end
+
+    % ---------- Step 2: Noise removal / cleaning ----------
+    volume3D = imgaussfilt3(volume3D, gaussSigma);
+    for z = 1:size(volume3D, 3)
+        volume3D(:, :, z) = medfilt2(volume3D(:, :, z), medianFiltSz);
+    end
+
+    % ---------- Step 3: Global voxel intensity scaling ----------
+    volMin = min(volume3D(:));
+    volMax = max(volume3D(:));
+    if volMax > volMin
+        volume3D = (volume3D - volMin) / (volMax - volMin);
+    else
+        volume3D = zeros(size(volume3D));
+        warning('Volume %s has zero dynamic range after cleaning.', niftiFiles(fileIdx).name);
+    end
+
+    % ---------- Step 4: Extract middle slices ----------
+    [xSize, ySize, numSlices] = size(volume3D);
+
+    middleStart = max(1, round(numSlices / 2 - numSlicesOut/2 + 1));
+    middleEnd   = min(numSlices, middleStart + numSlicesOut - 1);
+    if middleEnd - middleStart + 1 < numSlicesOut
+        middleStart = max(1, middleEnd - numSlicesOut + 1);
+    end
+
+    middleSlices = volume3D(:, :, middleStart:middleEnd);
+
+    % ---------- Step 5: Resize, convert to RGB, and save ----------
+    [~, fileName, ~] = fileparts(niftiFiles(fileIdx).name);
+
+    for s = 1:size(middleSlices, 3)
+        slice = middleSlices(:, :, s);
+
+        sliceResized = imresize(slice, targetSize);
+
+        slice8bit = im2uint8(sliceResized);
+        sliceRGB  = repmat(slice8bit, [1, 1, 3]);
+
+        sliceFilename = fullfile(outputDir, ...
+            sprintf('%s_slice_%02d.jpg', fileName, middleStart + s - 1));
+
+        imwrite(sliceRGB, sliceFilename, 'jpg');
+    end
+
+    fprintf('Processed and saved %d slices of %s as %dx%d 24-bit RGB JPEGs.\n', ...
+        size(middleSlices, 3), niftiFiles(fileIdx).name, targetSize(1), targetSize(2));
+end
+
+disp('All volumes processed successfully.');
