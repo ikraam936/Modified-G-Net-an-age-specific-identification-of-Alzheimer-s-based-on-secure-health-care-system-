@@ -1,0 +1,49 @@
+% GoogleNet used for feature extraction on fMRI from ADNI-4 and AD from ADNI-3 on 17-Nov-2025
+clear all;
+clc;
+close all;
+
+imds = imageDatastore('C:\ADNI\Ver.1\AGE-Specific\AGE_wise_JPG\80-above', ...
+    'IncludeSubfolders', true, ...
+    'LabelSource', 'foldernames');
+
+numImages = numel(imds.Files);
+
+matData = load('FullyTrained_Custom_GoogLeNet.mat');
+
+net = matData.trainedNet;
+lgraph = layerGraph(net);
+
+analyzeNetwork(net);
+
+inputSize = net.Layers(1).InputSize;
+augimds = augmentedImageDatastore(inputSize(1:2), imds, 'DispatchInBackground', true);
+
+featureLayer = 'feature_concat_2048';
+
+rawFeatures = minibatchpredict(net, augimds, 'Outputs', featureLayer);
+rawFeatures = gather(rawFeatures); 
+
+features = reshape(rawFeatures, [], numImages).';
+
+features = single(features);
+
+
+v1 = zeros(numImages, 1); 
+for k = 1:numImages
+    folderLabel = char(imds.Labels(k));
+    if contains(folderLabel, 'AD', 'IgnoreCase', true)
+        v1(k, 1) = 1; 
+    elseif contains(folderLabel, 'CN', 'IgnoreCase', true)
+        v1(k, 1) = 2; 
+    elseif contains(folderLabel, 'MCI', 'IgnoreCase', true)
+        v1(k, 1) = 3; 
+    end
+end
+
+YTrain = v1;  
+save('ExtractedFeatures_ModifiedGoogLeNet_80A.mat', 'features', 'YTrain', '-v7.3');
+
+disp('Feature extraction completed.');
+disp(['Total images processed: ' num2str(size(features,1))]);
+disp(['Feature length per image: ' num2str(size(features,2))]);
