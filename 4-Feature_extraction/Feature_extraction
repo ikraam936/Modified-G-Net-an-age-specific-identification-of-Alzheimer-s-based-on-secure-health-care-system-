@@ -9,7 +9,7 @@ imds = imageDatastore('C:\ADNI\Ver.1\AGE-Specific\AGE_wise_JPG\80-above', ...
 
 numImages = numel(imds.Files);
 
-matData = load('FullyTrained_Custom_GoogLeNet.mat');
+matData = load('trained_modified_GoogleNet.mat');
 
 net = matData.trainedNet;
 lgraph = layerGraph(net);
